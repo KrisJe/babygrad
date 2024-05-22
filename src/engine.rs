@@ -1,96 +1,274 @@
+use std::ops;
+use std::{cell::{Ref, RefCell, RefMut},
+     rc::Rc};
 
-/*class Value:
-    """ stores a single scalar value and its gradient """
 
-    def __init__(self, data, _children=(), _op=''):
-        self.data = data
-        self.grad = 0
-        # internal variables used for autograd graph construction
-        self._backward = lambda: None
-        self._prev = set(_children)
-        self._op = _op # the op that produced this node, for graphviz / debugging / etc
 
-    def __add__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data + other.data, (self, other), '+')
+#[derive(Clone, Debug)]
+pub enum Op {
+    None,
+    Add,
+    Mul,
+    Tanh,
+    Exp,
+    Pow,
+    Sub,
+    Div
+}
 
-        def _backward():
-            self.grad += out.grad
-            other.grad += out.grad
-        out._backward = _backward
+#[allow(dead_code)]
+#[derive(Debug)]
+pub struct ValueData {
+    value: f64,
+    children: Vec<Value>,
+    gradient: f64,
+    op: Op,
+    visited: bool,
+}
 
-        return out
 
-    def __mul__(self, other):
-        other = other if isinstance(other, Value) else Value(other)
-        out = Value(self.data * other.data, (self, other), '*')
+impl ValueData {
+    fn new(value: f64) -> ValueData {       
+        ValueData {
+            value: value,
+            children: vec![],
+            gradient: 0.0,
+            op: Op::None,
+            visited: false,
+        }
+    }
+}
 
-        def _backward():
-            self.grad += other.data * out.grad
-            other.grad += self.data * out.grad
-        out._backward = _backward
 
-        return out
 
-    def __pow__(self, other):
-        assert isinstance(other, (int, float)), "only supporting int/float powers for now"
-        out = Value(self.data**other, (self,), f'**{other}')
+#[derive(Clone, Debug)]
+pub struct Value(Rc<RefCell<ValueData>>);
 
-        def _backward():
-            self.grad += (other * self.data**(other-1)) * out.grad
-        out._backward = _backward
+impl Value {
+    pub fn new(value: f64) -> Value {
+        Value(Rc::new(RefCell::new(ValueData {
+            value: value,
+            children: vec![], //Vec::new(),
+            gradient: 0.0,
+            op: Op::None,
+            visited: false,
+        })))
+    }
 
-        return out
+    pub fn from(value: f64, children: Vec<Value>, op: Op) -> Value {
+        Value(Rc::new(RefCell::new(ValueData {
+            value: value,
+            children: children,
+            gradient: 0.0,
+            op: op,
+            visited: false,
+        })))
+    } 
 
-    def relu(self):
-        out = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
+    
+    fn op(&self) -> Op {
+        self.0.borrow().op.clone()
+    }
 
-        def _backward():
-            self.grad += (out.data > 0) * out.grad
-        out._backward = _backward
 
-        return out
+    pub fn value(&self) -> f64 {
+        self.0.borrow().value
+    }
 
-    def backward(self):
+    pub fn gradient(&self) -> f64 {
+        self.0.borrow().gradient
+    }
 
-        # topological order all of the children in the graph
-        topo = []
-        visited = set()
-        def build_topo(v):
-            if v not in visited:
-                visited.add(v)
-                for child in v._prev:
-                    build_topo(child)
-                topo.append(v)
-        build_topo(self)
 
-        # go one variable at a time and apply the chain rule to get its gradient
-        self.grad = 1
-        for v in reversed(topo):
-            v._backward()
+  
+    pub fn tanh(self) -> Value {
+        Value::from(self.value().tanh(), vec![self.clone()], Op::Tanh)
+    }
 
-    def __neg__(self): # -self
-        return self * -1
+ 
+    pub fn exp(self) -> Value {
+        Value::from(self.value().exp(), vec![self.clone()], Op::Exp)
+    }
 
-    def __radd__(self, other): # other + self
-        return self + other
+    pub fn pow(self, value: f64) -> Value {
+        Value::from(self.value().powf(value), vec![self.clone()], Op::Pow)
+    }
 
-    def __sub__(self, other): # self - other
-        return self + (-other)
+}
 
-    def __rsub__(self, other): # other - self
-        return other + (-self)
 
-    def __rmul__(self, other): # other * self
-        return self * other
 
-    def __truediv__(self, other): # self / other
-        return self * other**-1
+impl ops::Add<Value> for Value {
+    type Output = Value;
 
-    def __rtruediv__(self, other): # other / self
-        return other * self**-1
+    fn add(self, rhs: Value) -> Value {
+        Value::from(
+            self.value() + rhs.value(),
+            vec![self.clone(), rhs.clone()],
+            Op::Add,
+        )
+    }
+}
 
-    def __repr__(self):
-        return f"Value(data={self.data}, grad={self.grad})"
+impl ops::Mul<Value> for Value {
+    type Output = Value;
 
-        */
+    fn mul(self, rhs: Value) -> Value {
+        Value::from(
+            self.value() * rhs.value(),
+            vec![self.clone(), rhs.clone()],
+            Op::Mul,
+        )
+    }
+}
+
+impl ops::Div<Value> for Value {
+    type Output = Value;
+
+    fn div(self, rhs: Value) -> Value {
+        Value::from(
+            self.value() / rhs.value(),
+            vec![self.clone(), rhs.clone()],
+            Op::Div,
+        )
+    }
+}
+
+/* 
+impl ops::Sub<Value> for Value {
+    type Output = Value;
+
+    fn sub(self, rhs: Value) -> Value {
+        self + (rhs * -1.0)
+    }
+}
+*/
+impl ops::Sub<Value> for Value {
+    type Output = Value;
+
+    fn sub(self, rhs: Value) -> Value {
+        Value::from(
+            self.value() + (-1.0 * rhs.value()),
+            vec![self.clone(), rhs.clone()],
+            Op::Sub,
+        )
+    }
+}
+
+
+
+
+impl ops::Add<f64> for Value {
+    type Output = Value;
+
+    fn add(self, rhs: f64) -> Value {
+        self + Value::new(rhs)
+    }
+}
+
+impl ops::Sub<f64> for Value {
+    type Output = Value;
+
+    fn sub(self, rhs: f64) -> Value {
+        self + Value::new(-rhs)
+    }
+}
+
+impl ops::Mul<f64> for Value {
+    type Output = Value;
+
+    fn mul(self, rhs: f64) -> Value {
+        self * Value::new(rhs)
+    }
+}
+
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_a_value() {
+        let v = ValueData::new(10.0);
+        assert_eq!(v.value, 10.0);
+    }
+
+    #[test]
+    fn add() {
+        let a = Value::from(5.0,vec![],Op::None);
+        let b = Value::from(2.0,vec![],Op::None);
+        let c = a.clone() + b.clone();
+        assert_eq!(c.value(), 7.0);
+        assert!(matches!(c.op(), Op::Add));        
+    }
+
+    #[test]
+    fn subtract() {
+        let a = Value::from(5.0,vec![],Op::None);
+        let b = Value::from(2.0,vec![],Op::None);
+        let c = a.clone() - b.clone();
+        assert_eq!(c.value(), 3.0);
+        assert!(matches!(c.op(), Op::Sub));        
+    }
+
+
+    #[test]
+    fn multiply() {
+        let a = Value::from(5.0,vec![],Op::None);
+        let b = Value::from(2.0,vec![],Op::None);
+        let c = a.clone() * b.clone();
+        assert_eq!(c.value(), 10.0);
+        assert!(matches!(c.op(), Op::Mul));        
+    }
+
+    #[test]
+    fn scalar_multiply() {
+        let a = 5.0;
+        let b = Value::from(2.0,vec![],Op::None);
+        let c = b.clone() * a;
+        //let c = a * b.clone(); DOESN'T WORK!
+        assert_eq!(c.value(), 10.0);
+    }
+
+
+    #[test]
+    fn div() {
+        let a = Value::from(5.0,vec![],Op::None);
+        let b = Value::from(2.0,vec![],Op::None);
+        let c = a.clone() / b.clone();
+        assert_eq!(c.value(), 2.5);
+        assert!(matches!(c.op(), Op::Div));      
+    }
+
+
+    #[test]
+    fn tanh() {
+        let a = Value::from(1.0,vec![],Op::None);
+        let b = a.tanh();        
+        assert_eq!(b.value(), 0.7615941559557649);
+        assert!(matches!(b.op(), Op::Tanh));      
+    }
+
+    #[test]
+    fn exp() {
+        let a = Value::from(5.0,vec![],Op::None);
+        let b = a.exp();        
+        assert_eq!(b.value(), 148.4131591025766);
+        assert!(matches!(b.op(), Op::Exp));      
+    }
+
+
+    #[test]
+    fn pow() {
+        let a = Value::from(5.0,vec![],Op::None);
+        let b = a.pow(2.0);        
+        assert_eq!(b.value(), 25.0);
+        assert!(matches!(b.op(), Op::Pow));      
+    }
+
+   
+
+}
