@@ -1,4 +1,11 @@
-/*import random
+
+//mod engine;
+
+
+//use engine::Value;
+use crate::Value;
+/*
+import random
 from micrograd.engine import Value
 
 class Module:
@@ -9,7 +16,9 @@ class Module:
 
     def parameters(self):
         return []
+*/
 
+/* 
 class Neuron(Module):
 
     def __init__(self, nin, nonlin=True):
@@ -26,7 +35,35 @@ class Neuron(Module):
 
     def __repr__(self):
         return f"{'ReLU' if self.nonlin else 'Linear'}Neuron({len(self.w)})"
+*/
 
+
+
+
+pub struct Neuron {
+    pub weights: Vec<Value>,
+    pub bias: Value,
+    pub nonlin: bool,
+}
+
+impl Neuron {
+    pub fn new(w_input_size: usize, nonlin: bool) -> Neuron {   
+        Neuron{ 
+            weights : vec![Value::new(0.0); w_input_size],
+            bias:  Value::new(0.0),
+            nonlin : nonlin,           
+        }
+    }
+
+    fn parameters(&self) -> Vec<Value> {
+        let mut result = self.weights.clone();
+        result.push(self.bias.clone());
+        result
+    }
+}
+
+
+/*
 class Layer(Module):
 
     def __init__(self, nin, nout, **kwargs):
@@ -41,7 +78,22 @@ class Layer(Module):
 
     def __repr__(self):
         return f"Layer of [{', '.join(str(n) for n in self.neurons)}]"
+*/
 
+pub enum ActivationFunc {
+    RELU,
+    TANH,
+    LINEAR,
+    SIGMIOD,
+    GELU
+}
+
+pub struct MLP {
+    pub layers: Vec<Neuron>,
+    pub act: ActivationFunc,
+}
+
+/* 
 class MLP(Module):
 
     def __init__(self, nin, nouts):
@@ -57,4 +109,24 @@ class MLP(Module):
         return [p for layer in self.layers for p in layer.parameters()]
 
     def __repr__(self):
-        return f"MLP of [{', '.join(str(layer) for layer in self.layers)}]"*/
+        return f"MLP of [{', '.join(str(layer) for layer in self.layers)}]"
+        
+*/
+
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn create_neutron() {
+        let lin = Neuron::new(3, true);
+        assert_eq!(lin.parameters().len(), 4);    
+    }
+
+
+
+}
