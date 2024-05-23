@@ -1,6 +1,6 @@
 # babygrad
 
-A tiny Autograd engine in Rust based on the micrograd by Andrej Karpathy.
+A tiny Autograd engine in Rust based on the ![micrograd](https://www.youtube.com/watch?v=VMj-3S1tku0) by Andrej Karpathy.
 
 Goal:
  > 1. As comprehensive as the Python implementation by Mr. Karpathy
