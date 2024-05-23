@@ -1,4 +1,5 @@
-
+use rand::distributions::{Distribution, Uniform};
+use std::iter::zip;
 //mod engine;
 
 
@@ -37,9 +38,18 @@ class Neuron(Module):
         return f"{'ReLU' if self.nonlin else 'Linear'}Neuron({len(self.w)})"
 */
 
+#[derive(Debug)]
+pub enum ActivationFunc {
+    None,
+    Relu,
+    Tanh,
+    Linear,
+    Sigmoid,
+    Gelu
+}
 
 
-
+#[derive(Debug)]
 pub struct Neuron {
     pub weights: Vec<Value>,
     pub bias: Value,
@@ -48,14 +58,42 @@ pub struct Neuron {
 
 impl Neuron {
     pub fn new(w_input_size: usize, nonlin: bool) -> Neuron {   
+        let mut rng = rand::thread_rng();
+        let uniform = Uniform::new_inclusive(-1.0, 1.0);
+        
+        let mut weights: Vec<Value> = Vec::new();
+        for _ in 1..=w_input_size {
+            weights.push(Value::new(uniform.sample(&mut rng)));
+        }
+
         Neuron{ 
-            weights : vec![Value::new(0.0); w_input_size],
-            bias:  Value::new(0.0),
+            weights : weights,
+            bias: Value::new(0.0), //Value::new(uniform.sample(&mut rng)),
             nonlin : nonlin,           
         }
     }
 
-    fn parameters(&self) -> Vec<Value> {
+    pub fn call(&self, inputs: Vec<Value>, act: ActivationFunc)-> Value{        
+        let mut output = self.bias.clone();
+        for (input, weight) in zip(inputs, self.weights.iter()) {
+            output = output + input * weight.clone();
+        }       
+        if self.nonlin == false {
+            return output;
+        }
+        else{
+            match act {  
+                //ActivationFunc::Relu => println!("Applying ReLU activation function"),            
+                //ActivationFunc::Linear => println!("Applying Linear activation function"),
+                //ActivationFunc::Sigmoid => println!("Applying Sigmoid activation function"),
+                //ActivationFunc::Gelu => println!("Applying GELU activation function"),          
+                ActivationFunc::Tanh => output.tanh(),
+                _ => output,          
+            }   
+        }   
+    }
+
+    pub fn parameters(&self) -> Vec<Value> {
         let mut result = self.weights.clone();
         result.push(self.bias.clone());
         result
@@ -80,14 +118,9 @@ class Layer(Module):
         return f"Layer of [{', '.join(str(n) for n in self.neurons)}]"
 */
 
-pub enum ActivationFunc {
-    RELU,
-    TANH,
-    LINEAR,
-    SIGMIOD,
-    GELU
-}
 
+
+#[derive(Debug)]
 pub struct MLP {
     pub layers: Vec<Neuron>,
     pub act: ActivationFunc,
