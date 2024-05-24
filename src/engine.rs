@@ -3,7 +3,7 @@ use std::{cell::{Ref, RefCell, RefMut},
      rc::Rc};
 
 
-
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum Op {
     None,
@@ -13,7 +13,8 @@ pub enum Op {
     Exp,
     Pow,
     Sub,
-    Div
+    Div,
+    Relu
 }
 
 #[allow(dead_code)]
@@ -66,7 +67,7 @@ impl Value {
     } 
 
     
-    fn op(&self) -> Op {
+    pub fn op(&self) -> Op {
         self.0.borrow().op.clone()
     }
 
@@ -77,6 +78,13 @@ impl Value {
 
     pub fn gradient(&self) -> f64 {
         self.0.borrow().gradient
+    }
+
+    pub fn vec(values: &[f64]) -> Vec<Value> {
+        values
+            .iter()
+            .map(|el| Value::new(*el))
+            .collect::<Vec<Value>>()
     }
 
 
@@ -94,7 +102,9 @@ impl Value {
         Value::from(self.value().powf(value), vec![self.clone()], Op::Pow)
     }
 
+
 }
+
 
 
 
@@ -109,6 +119,7 @@ impl ops::Add<Value> for Value {
         )
     }
 }
+
 
 impl ops::Mul<Value> for Value {
     type Output = Value;
@@ -155,8 +166,21 @@ impl ops::Sub<Value> for Value {
     }
 }
 
+impl ops::Mul<Value> for f64 {
+    type Output = Value;
+    
+    fn mul(self, rhs: Value) -> Value {
+        Value::new(self * rhs.value())
+    }
+} 
 
-
+impl ops::Add<Value> for f64 {
+    type Output = Value;
+    
+    fn add(self, rhs: Value) -> Value {
+        Value::new(self + rhs.value())
+    }
+}
 
 impl ops::Add<f64> for Value {
     type Output = Value;
@@ -180,6 +204,12 @@ impl ops::Mul<f64> for Value {
     fn mul(self, rhs: f64) -> Value {
         self * Value::new(rhs)
     }
+
+
+
+
+  
+
 }
 
 
@@ -202,7 +232,16 @@ mod tests {
         let b = Value::from(2.0,vec![],Op::None);
         let c = a.clone() + b.clone();
         assert_eq!(c.value(), 7.0);
-        assert!(matches!(c.op(), Op::Add));        
+        assert!(matches!(c.op(), Op::Add));    
+
+        let c = a.clone() + 3.0;
+        assert_eq!(c.value(), 8.0);
+        assert!(matches!(c.op(), Op::Add));  
+
+        let c = 5.0 + a.clone();
+        assert_eq!(c.value(), 10.0);
+        //assert!(matches!(c.op(), Op::Add)); //DOESN'T WORK!
+
     }
 
     #[test]
@@ -211,7 +250,12 @@ mod tests {
         let b = Value::from(2.0,vec![],Op::None);
         let c = a.clone() - b.clone();
         assert_eq!(c.value(), 3.0);
-        assert!(matches!(c.op(), Op::Sub));        
+        assert!(matches!(c.op(), Op::Sub)); 
+
+
+        let c = b.clone() - a.clone();
+        assert_eq!(c.value(), -3.0);
+        assert!(matches!(c.op(), Op::Sub));      
     }
 
 
@@ -228,9 +272,13 @@ mod tests {
     fn scalar_multiply() {
         let a = 5.0;
         let b = Value::from(2.0,vec![],Op::None);
-        let c = b.clone() * a;
-        //let c = a * b.clone(); DOESN'T WORK!
+        let c = b.clone() * a;    
         assert_eq!(c.value(), 10.0);
+        assert!(matches!(c.op(), Op::Mul)); 
+      
+        let c = a * b.clone(); 
+        assert_eq!(c.value(), 10.0);
+        //assert!(matches!(c.op(), Op::Mul)); //DOESN'T WORK!
     }
 
 
