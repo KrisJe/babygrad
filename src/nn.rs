@@ -2,9 +2,11 @@ use rand::distributions::{Distribution, Uniform};
 use std::iter::zip;
 //mod engine;
 
-
 //use engine::Value;
 use crate::Value;
+
+
+
 /*
 import random
 from micrograd.engine import Value
@@ -37,8 +39,8 @@ class Neuron(Module):
     def __repr__(self):
         return f"{'ReLU' if self.nonlin else 'Linear'}Neuron({len(self.w)})"
 */
-
-#[derive(Debug)]
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub enum ActivationFunc {
     None,
     Relu,
@@ -73,7 +75,7 @@ impl Neuron {
         }
     }
 
-    pub fn call(&self, inputs: Vec<Value>, act: ActivationFunc)-> Value{        
+    pub fn forward(&self, inputs: Vec<Value>, act: ActivationFunc)-> Value{        
         let mut output = self.bias.clone();
         for (input, weight) in zip(inputs, self.weights.iter()) {
             output = output + input * weight.clone();
@@ -119,12 +121,38 @@ class Layer(Module):
 */
 
 
-
 #[derive(Debug)]
-pub struct MLP {
-    pub layers: Vec<Neuron>,
-    pub act: ActivationFunc,
+pub struct Layer {
+    pub neurons: Vec<Neuron>,
 }
+
+#[allow(dead_code)]
+impl Layer {
+    fn new(input_size: usize, output_size: usize) -> Layer {
+        let mut neurons: Vec<Neuron> = Vec::new();
+        for _ in 1..=output_size {
+            neurons.push(Neuron::new(input_size, false));
+        }
+        Layer { neurons}
+    }
+
+    fn forward(&self, inputs: Vec<Value>, act: ActivationFunc) -> Vec<Value> {
+        let mut result: Vec<Value> = Vec::new();
+        for neuron in self.neurons.iter() {
+            result.push(neuron.forward(inputs.clone(), act.clone()));
+        }
+        result
+    }
+
+    fn parameters(&self) -> Vec<Value> {
+        let mut parameters: Vec<Value> = Vec::new();
+        for neuron in self.neurons.iter() {
+            parameters.append(&mut neuron.parameters())
+        }
+        parameters
+    }
+}
+
 
 /* 
 class MLP(Module):
@@ -147,6 +175,50 @@ class MLP(Module):
 */
 
 
+#[derive(Debug)]
+pub struct MLP {
+    pub layers: Vec<Layer>,
+    //pub act: ActivationFunc,
+}
+
+
+#[allow(dead_code)]
+impl MLP {
+    fn new(input_size: usize, hidden_layers_size: &[usize]) -> MLP {
+        let mut layers: Vec<Layer> = Vec::new();
+        let hlc = hidden_layers_size.len();
+        layers.push(Layer::new(input_size, hidden_layers_size[0]));
+        for i in 0..hlc - 1 {
+            layers.push(Layer::new(hidden_layers_size[i], hidden_layers_size[i + 1]))
+        }
+        layers.push(Layer::new(hidden_layers_size[hlc - 1], 1));
+        MLP {layers}
+    }
+
+    fn forward(&self, inputs: Vec<Value>) -> Value {
+        let mut outputs: Vec<Value> = inputs;
+        for layer in self.layers.iter() {
+            outputs = layer.forward(outputs, ActivationFunc::None)
+        }
+        assert!(outputs.len() == 1);
+        outputs[0].clone()
+    }
+
+    fn shape(&self) -> Vec<usize> {
+        let mut sizes: Vec<usize> = Vec::new();
+        sizes.push(self.layers[0].neurons[0].weights.len());
+        sizes.append(&mut self.layers.iter().map(|el| el.neurons.len()).collect::<Vec<usize>>());
+        sizes
+    }
+
+    fn parameters(&self) -> Vec<Value> {
+        let mut parameters: Vec<Value> = Vec::new();
+        for layer in self.layers.iter() {
+            parameters.append(&mut layer.parameters())
+        }
+        parameters
+    }
+}
 
 
 
@@ -156,8 +228,36 @@ mod tests {
 
     #[test]
     fn create_neutron() {
-        let lin = Neuron::new(3, true);
+        let lin = Neuron::new(3, false);
         assert_eq!(lin.parameters().len(), 4);    
+    }
+
+    #[test]
+    fn layer() {   
+
+        let layer1 = Layer::new(4,4);
+        let mut inputs: Vec<Value> = Vec::new();
+        layer1.forward(inputs, ActivationFunc::None);
+        assert_eq!(layer1.parameters().len(), 20); 
+    }
+
+
+    #[test]
+    fn MLP() {       
+        let xs: &[&[f64]] = &[
+            &[1.0, 6.0, 0.0],
+            &[0.0, 3.0, 1.0],
+            &[2.0, 4.0, 0.0],
+            &[0.0, 3.0, 2.0],
+            &[3.0, 2.0, 0.0],
+            &[0.0, 1.0, 3.0],
+        ];  
+       
+        let mlp = MLP::new(3, &[4, 4]);
+        assert_eq!(mlp.parameters().len(), 41); 
+        let output = mlp.forward(Value::vec(xs[0]));
+  
+        assert_eq!(mlp.parameters().len(), 41);
     }
 
 
