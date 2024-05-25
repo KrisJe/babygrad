@@ -14,7 +14,8 @@ pub enum Op {
     Pow,
     Sub,
     Div,
-    Relu
+    Relu,
+    Neg
 }
 
 #[allow(dead_code)]
@@ -41,7 +42,7 @@ impl ValueData {
 }
 
 
-
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct Value(Rc<RefCell<ValueData>>);
 
@@ -66,9 +67,32 @@ impl Value {
         })))
     } 
 
+    fn child(&self, index: usize) -> Value {
+        self.0.borrow().children[index].clone()
+    }
+
+    fn only_child(&self) -> Value {
+        assert!(self.0.borrow().children.len() == 1);
+        self.child(0)
+    }
+
+    fn lhs(&self) -> Value {
+        assert!(self.0.borrow().children.len() == 2);
+        self.child(0)
+    }
     
+    
+    fn rhs(&self) -> Value {
+        assert!(self.0.borrow().children.len() == 2);
+        self.child(1)
+    }
+
     pub fn op(&self) -> Op {
         self.0.borrow().op.clone()
+    }
+
+    fn visited(&self) -> bool {
+        self.0.borrow().visited
     }
 
 
@@ -78,6 +102,10 @@ impl Value {
 
     pub fn gradient(&self) -> f64 {
         self.0.borrow().gradient
+    }
+
+    fn inc_gradient(&self, amount: f64) {
+        self.0.borrow_mut().gradient += amount
     }
 
     pub fn vec(values: &[f64]) -> Vec<Value> {
@@ -103,8 +131,95 @@ impl Value {
     }
 
 
-}
+    fn _reset_children_gradients_and_visited(node: &Value) {
+        for children in node.0.borrow().children.iter() {
+            children.0.borrow_mut().gradient = 0.0;
+            children.0.borrow_mut().visited = false;
+            Value::_reset_children_gradients_and_visited(children);
+        }
+    }
 
+    fn _find_leaf_nodes_not_visited(node: &Value) -> Vec<Value> {
+        let mut result: Vec<Value> = Vec::new();
+        if !node.visited() {
+            let mut count = 0;
+            for child in node.0.borrow().children.iter() {
+                if !child.visited() {
+                    result.append(&mut Value::_find_leaf_nodes_not_visited(child));
+                    count += 1;
+                }
+            }
+            if count == 0 {
+                node.0.borrow_mut().visited = true;
+                result.push(node.clone())
+            }
+        }
+        result
+    }
+
+    fn backward(&self) {
+        
+        Value::_reset_children_gradients_and_visited(self);
+
+        // Run topological sorting to compute the ordered list of parameters        
+
+        let mut parameters: Vec<Value> = Vec::new();
+        loop {
+            let mut leafs = Value::_find_leaf_nodes_not_visited(self);
+            if leafs.len() == 0 {
+                break;
+            }
+            parameters.append(&mut leafs);
+        }
+
+        parameters.reverse();
+        parameters[0].0.borrow_mut().gradient = 1.0;
+
+        // Fill in all the gradients in reverse topological order
+
+        for node in parameters {
+            let out_gradient = node.gradient();
+            let out_value = node.value();
+
+            match node.op() {               
+                Op::Sub | Op::Add => {
+                    node.lhs().inc_gradient(out_gradient);
+                    node.rhs().inc_gradient(out_gradient);
+                }
+                Op::Mul => {
+                    node.lhs().inc_gradient(node.rhs().value() * out_gradient);
+                    node.rhs().inc_gradient(node.lhs().value() * out_gradient);
+                }
+                Op::Div => {
+                    let lhs_value = node.lhs().value();
+                    let rhs_value = node.rhs().value();
+                    node.lhs().inc_gradient(out_gradient / rhs_value);
+                    node.rhs().inc_gradient(-lhs_value * out_gradient / (rhs_value * rhs_value));
+                }
+                Op::Neg => {
+                    node.only_child().inc_gradient(-out_gradient);
+                }
+                Op::Tanh => {
+                    node.only_child()
+                        .inc_gradient((1.0 - out_value * out_value) * out_gradient);
+                }
+                Op::Exp => {
+                    node.only_child().inc_gradient(out_value * out_gradient);
+                }
+                Op::Pow => {
+                    let child_value = node.only_child().value();
+                    let exponent = out_value.log10() / child_value.log10();
+                    node.only_child()
+                        .inc_gradient(exponent * out_value / child_value * out_gradient);
+                }
+                _ => (),
+            }
+        }
+    }
+
+
+
+}
 
 
 
@@ -166,6 +281,15 @@ impl ops::Sub<Value> for Value {
     }
 }
 
+
+impl ops::Neg for Value {
+    type Output = Value;
+
+    fn neg(self) -> Value {
+        Value::new(- self.value() )        
+    }
+}
+
 impl ops::Mul<Value> for f64 {
     type Output = Value;
     
@@ -198,7 +322,6 @@ impl ops::Sub<Value> for f64 {
         Value::new(self +(-1.0 * rhs.value()))
     }
 } 
-
 
 
 impl ops::Add<f64> for Value {
@@ -242,6 +365,13 @@ impl ops::Div<f64> for Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+   
+
+    macro_rules! assert_approx {
+        ($a:expr , $b:expr) => {
+            assert!(($a - $b).abs() < 1e-8, "{} !~= {}", $a, $b);
+        };
+    }
 
     #[test]
     fn create_a_value() {
@@ -278,13 +408,13 @@ mod tests {
     #[test]
     fn test_arithmetic_operations_serie1() {
         // Test arithmetic operations
-        let value1 = Value::from(2.0, vec![], Op::None);
-        let value2 = Value::from(3.0, vec![], Op::None);
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = Value::from(3.0, vec![], Op::None);
 
-        let result_add = value1.clone() + value2.clone();
-        let result_sub = value1.clone() - value2.clone();
-        let result_mul = value1.clone() * value2.clone();
-        let result_div = value1.clone() / value2.clone();
+        let result_add = a.clone() + b.clone();
+        let result_sub = a.clone() - b.clone();
+        let result_mul = a.clone() * b.clone();
+        let result_div = a.clone() / b.clone();
 
         // Assert the results of arithmetic operations
         assert_eq!(result_add.value(), 5.0);
@@ -297,13 +427,13 @@ mod tests {
     #[test]
     fn test_arithmetic_operations_serie2() {
         // Test arithmetic operations
-        let value1 = Value::from(2.0, vec![], Op::None);
-        let value2 = 3.0;
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = 3.0;
 
-        let result_add = value1.clone() + value2;
-        let result_sub = value1.clone() - value2;
-        let result_mul = value1.clone() * value2;
-        let result_div = value1.clone() / value2;
+        let result_add = a.clone() + b;
+        let result_sub = a.clone() - b;
+        let result_mul = a.clone() * b;
+        let result_div = a.clone() / b;
 
         // Assert the results of arithmetic operations
         assert_eq!(result_add.value(), 5.0);
@@ -316,13 +446,13 @@ mod tests {
     #[test]
     fn test_arithmetic_operations_serie3() {
         // Test arithmetic operations
-        let value1 = 2.0;
-        let value2 = Value::from(3.0, vec![], Op::None);
+        let a = 2.0;
+        let b = Value::from(3.0, vec![], Op::None);
 
-        let result_add = value1 + value2.clone();
-        let result_sub = value1 - value2.clone();
-        let result_mul = value1 * value2.clone();
-        let result_div = value1 / value2.clone();
+        let result_add = a + b.clone();
+        let result_sub = a - b.clone();
+        let result_mul = a * b.clone();
+        let result_div = a / b.clone();
 
         // Assert the results of arithmetic operations
         assert_eq!(result_add.value(), 5.0);
@@ -330,6 +460,74 @@ mod tests {
         assert_eq!(result_mul.value(), 6.0);
         assert_eq!(result_div.value(), 2.0 / 3.0);
       
+    }
+
+    #[test]
+    fn abc_backward1()
+    {
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = Value::from(- 3.0, vec![], Op::None);
+        let c = Value::from(10.0, vec![], Op::None);
+        let d = a.clone() * b.clone() + c.clone();
+
+        //let d = d.tanh();
+        d.backward();
+        assert_approx!(a.gradient(), -3.0);
+        assert_approx!(b.gradient(), 2.0);
+        assert_approx!(c.gradient(), 1.0);
+
+    }
+    
+    #[test]
+    fn abc_backward2()
+    {
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = - Value::from(3.0, vec![], Op::None);
+        let c = Value::from(10.0, vec![], Op::None);
+        let d = a.clone() * b.clone() + c.clone();
+
+        //let d = d.tanh();
+        d.backward();
+        assert_approx!(a.gradient(), -3.0);
+        assert_approx!(b.gradient(), 2.0);
+        assert_approx!(c.gradient(), 1.0);
+
+    }
+
+    #[test]
+    fn abc_backward3()
+    {
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = Value::from(-3.0, vec![], Op::None);
+        let c = Value::from(10.0, vec![], Op::None);
+        let d = a.clone() / b.clone() + c.clone();
+
+        //let d = d.tanh();
+        d.backward();
+        assert_approx!(a.gradient(), -0.3333333333333333);
+        assert_approx!(b.gradient(), -0.2222222222222222);
+        assert_approx!(c.gradient(), 1.0);
+
+    }
+
+    #[test]
+    fn abc_backward4() {
+       
+        let x1 = Value::from(2.0, vec![], Op::None);
+        let x2 = Value::from(0.0, vec![], Op::None);
+        let w1 = Value::from(-3.0, vec![], Op::None);
+        let w2 = Value::from(1.0, vec![], Op::None);
+        let b = Value::from(6.88137358, vec![], Op::None);
+
+        let x1w1 = x1 * w1.clone();
+        let x2w2 = x2 * w2.clone();
+        let x1w1x2w2 = x1w1 + x2w2;
+        let n = x1w1x2w2 + b;
+        let o = n.tanh();
+        o.backward();
+
+        assert_approx!(w1.gradient(), 1.0);
+        assert_approx!(w2.gradient(), 0.0);
     }
 
 }
