@@ -1,4 +1,5 @@
 # babygrad
+[![Unit Tests](https://github.com/KrisJE/babygrad/actions/workflows/test.yml/badge.svg)](https://github.com/KrisJE/babygrad/actions/workflows/test.yml)
 
 A tiny Autograd engine in Rust based on the [micrograd](https://www.youtube.com/watch?v=VMj-3S1tku0) by Andrej Karpathy.
 
