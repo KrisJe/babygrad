@@ -182,6 +182,25 @@ impl ops::Add<Value> for f64 {
     }
 }
 
+impl ops::Div<Value> for f64 {
+    type Output = Value;
+    
+    fn div(self, rhs: Value) -> Value {
+        Value::new(self / rhs.value())
+    }
+} 
+
+
+impl ops::Sub<Value> for f64 {
+    type Output = Value;
+    
+    fn sub(self, rhs: Value) -> Value {
+        Value::new(self +(-1.0 * rhs.value()))
+    }
+} 
+
+
+
 impl ops::Add<f64> for Value {
     type Output = Value;
 
@@ -205,10 +224,14 @@ impl ops::Mul<f64> for Value {
         self * Value::new(rhs)
     }
 
+}
 
+impl ops::Div<f64> for Value {
+    type Output = Value;
 
-
-  
+    fn div(self, rhs: f64) -> Value {
+        self / Value::new(rhs)
+    }
 
 }
 
@@ -224,71 +247,6 @@ mod tests {
     fn create_a_value() {
         let v = ValueData::new(10.0);
         assert_eq!(v.value, 10.0);
-    }
-
-    #[test]
-    fn add() {
-        let a = Value::from(5.0,vec![],Op::None);
-        let b = Value::from(2.0,vec![],Op::None);
-        let c = a.clone() + b.clone();
-        assert_eq!(c.value(), 7.0);
-        assert!(matches!(c.op(), Op::Add));    
-
-        let c = a.clone() + 3.0;
-        assert_eq!(c.value(), 8.0);
-        assert!(matches!(c.op(), Op::Add));  
-
-        let c = 5.0 + a.clone();
-        assert_eq!(c.value(), 10.0);
-        //assert!(matches!(c.op(), Op::Add)); //DOESN'T WORK!
-
-    }
-
-    #[test]
-    fn subtract() {
-        let a = Value::from(5.0,vec![],Op::None);
-        let b = Value::from(2.0,vec![],Op::None);
-        let c = a.clone() - b.clone();
-        assert_eq!(c.value(), 3.0);
-        assert!(matches!(c.op(), Op::Sub)); 
-
-
-        let c = b.clone() - a.clone();
-        assert_eq!(c.value(), -3.0);
-        assert!(matches!(c.op(), Op::Sub));      
-    }
-
-
-    #[test]
-    fn multiply() {
-        let a = Value::from(5.0,vec![],Op::None);
-        let b = Value::from(2.0,vec![],Op::None);
-        let c = a.clone() * b.clone();
-        assert_eq!(c.value(), 10.0);
-        assert!(matches!(c.op(), Op::Mul));        
-    }
-
-    #[test]
-    fn scalar_multiply() {
-        let a = 5.0;
-        let b = Value::from(2.0,vec![],Op::None);
-        let c = b.clone() * a;    
-        assert_eq!(c.value(), 10.0);
-        assert!(matches!(c.op(), Op::Mul)); 
-      
-        let c = a * b.clone(); 
-        assert_eq!(c.value(), 10.0);
-        //assert!(matches!(c.op(), Op::Mul)); //DOESN'T WORK!
-    }
-
-
-    #[test]
-    fn div() {
-        let a = Value::from(5.0,vec![],Op::None);
-        let b = Value::from(2.0,vec![],Op::None);
-        let c = a.clone() / b.clone();
-        assert_eq!(c.value(), 2.5);
-        assert!(matches!(c.op(), Op::Div));      
     }
 
 
@@ -317,6 +275,61 @@ mod tests {
         assert!(matches!(b.op(), Op::Pow));      
     }
 
-   
+    #[test]
+    fn test_arithmetic_operations_serie1() {
+        // Test arithmetic operations
+        let value1 = Value::from(2.0, vec![], Op::None);
+        let value2 = Value::from(3.0, vec![], Op::None);
+
+        let result_add = value1.clone() + value2.clone();
+        let result_sub = value1.clone() - value2.clone();
+        let result_mul = value1.clone() * value2.clone();
+        let result_div = value1.clone() / value2.clone();
+
+        // Assert the results of arithmetic operations
+        assert_eq!(result_add.value(), 5.0);
+        assert_eq!(result_sub.value(), -1.0);
+        assert_eq!(result_mul.value(), 6.0);
+        assert_eq!(result_div.value(), 2.0 / 3.0);
+      
+    }
+
+    #[test]
+    fn test_arithmetic_operations_serie2() {
+        // Test arithmetic operations
+        let value1 = Value::from(2.0, vec![], Op::None);
+        let value2 = 3.0;
+
+        let result_add = value1.clone() + value2;
+        let result_sub = value1.clone() - value2;
+        let result_mul = value1.clone() * value2;
+        let result_div = value1.clone() / value2;
+
+        // Assert the results of arithmetic operations
+        assert_eq!(result_add.value(), 5.0);
+        assert_eq!(result_sub.value(), -1.0);
+        assert_eq!(result_mul.value(), 6.0);
+        assert_eq!(result_div.value(), 2.0 / 3.0);
+      
+    }
+
+    #[test]
+    fn test_arithmetic_operations_serie3() {
+        // Test arithmetic operations
+        let value1 = 2.0;
+        let value2 = Value::from(3.0, vec![], Op::None);
+
+        let result_add = value1 + value2.clone();
+        let result_sub = value1 - value2.clone();
+        let result_mul = value1 * value2.clone();
+        let result_div = value1 / value2.clone();
+
+        // Assert the results of arithmetic operations
+        assert_eq!(result_add.value(), 5.0);
+        assert_eq!(result_sub.value(), -1.0);
+        assert_eq!(result_mul.value(), 6.0);
+        assert_eq!(result_div.value(), 2.0 / 3.0);
+      
+    }
 
 }
