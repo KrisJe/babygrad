@@ -1,6 +1,7 @@
 use std::ops;
 use std::{cell::{Ref, RefCell, RefMut},
      rc::Rc};
+use std::fmt;
 
 
 #[allow(dead_code)]
@@ -314,7 +315,6 @@ impl ops::Div<Value> for f64 {
     }
 } 
 
-
 impl ops::Sub<Value> for f64 {
     type Output = Value;
     
@@ -322,7 +322,6 @@ impl ops::Sub<Value> for f64 {
         Value::new(self +(-1.0 * rhs.value()))
     }
 } 
-
 
 impl ops::Add<f64> for Value {
     type Output = Value;
@@ -359,6 +358,13 @@ impl ops::Div<f64> for Value {
 }
 
 
+
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Value[{}, grad={}, op={:?}]", self.value(), self.gradient(), self.op())
+    }
+}
 
 
 
@@ -525,6 +531,8 @@ mod tests {
         let n = x1w1x2w2 + b;
         let o = n.tanh();
         o.backward();
+
+        println!("{}", o);
 
         assert_approx!(w1.gradient(), 1.0);
         assert_approx!(w2.gradient(), 0.0);

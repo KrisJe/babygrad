@@ -4,6 +4,7 @@ use std::iter::zip;
 
 //use engine::Value;
 use crate::Value;
+use std::fmt;
 
 
 
@@ -103,6 +104,23 @@ impl Neuron {
 }
 
 
+
+
+
+impl fmt::Display for Neuron {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f,"Neuron[")?;
+        write!(f,"weigths=")?;
+        for v in self.parameters(){
+            write!(f, "{},",v)?;            
+        }      
+        writeln!(f,"\nbias={}",self.bias)?;
+        writeln!(f,"nonlin={}",self.nonlin)?;
+        writeln!(f,"]")?;  
+        Ok(())      
+    }
+}
+
 /*
 class Layer(Module):
 
@@ -154,6 +172,13 @@ impl Layer {
 }
 
 
+impl fmt::Display for Layer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+       
+        todo!()
+    }
+}
+
 /* 
 class MLP(Module):
 
@@ -203,13 +228,13 @@ impl MLP {
         assert!(outputs.len() == 1);
         outputs[0].clone()
     }
-
+/*
     fn shape(&self) -> Vec<usize> {
         let mut sizes: Vec<usize> = Vec::new();
         sizes.push(self.layers[0].neurons[0].weights.len());
         sizes.append(&mut self.layers.iter().map(|el| el.neurons.len()).collect::<Vec<usize>>());
         sizes
-    }
+    }*/
 
     fn parameters(&self) -> Vec<Value> {
         let mut parameters: Vec<Value> = Vec::new();
@@ -218,7 +243,17 @@ impl MLP {
         }
         parameters
     }
+
+    
 }
+
+impl fmt::Display for MLP {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+       
+        todo!()
+    }
+}
+
 
 
 
@@ -228,8 +263,10 @@ mod tests {
 
     #[test]
     fn create_neutron() {
-        let lin = Neuron::new(3, false);
-        assert_eq!(lin.parameters().len(), 4);    
+        let n = Neuron::new(3, false);        
+        println!("{}", n);
+        assert_eq!(n.parameters().len(), 4); 
+
     }
 
     #[test]
