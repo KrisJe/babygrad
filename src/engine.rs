@@ -4,6 +4,15 @@ use std::{cell::{Ref, RefCell, RefMut},
 use std::fmt;
 
 
+extern crate graphviz_rust;
+use graphviz_rust::dot_structures::*;
+use graphviz_rust::parse;
+use graphviz_rust::dot_generator::*;
+use graphviz_rust::attributes::GraphAttributes as GAttributes;
+use self::graphviz_rust::attributes::{EdgeAttributes, NodeAttributes, rankdir, shape};
+use self::graphviz_rust::printer::{DotPrinter, PrinterContext};
+
+
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum Op {
@@ -157,6 +166,8 @@ impl Value {
         }
         result
     }
+    
+    
 
     fn backward(&self) {
         
@@ -218,7 +229,11 @@ impl Value {
         }
     }
 
-
+    pub fn export_graph(&self) {
+        /*https://medium.com/@zhguchev/how-to-use-graphviz-in-your-rust-code-eb2c5771cfab */
+        let mut g = graph!(id!("id"));
+        println!("{}",g.print(&mut PrinterContext::default()));     
+    }
 
 }
 
@@ -357,9 +372,6 @@ impl ops::Div<f64> for Value {
 
 }
 
-
-
-
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Value[{}, grad={}, op={:?}]", self.value(), self.gradient(), self.op())
@@ -469,23 +481,23 @@ mod tests {
     }
 
     #[test]
-    fn abc_backward1()
+    fn abc_backpropagation1()
     {
         let a = Value::from(2.0, vec![], Op::None);
-        let b = Value::from(- 3.0, vec![], Op::None);
+        let b = Value::from(3.0, vec![], Op::None);
         let c = Value::from(10.0, vec![], Op::None);
         let d = a.clone() * b.clone() + c.clone();
 
         //let d = d.tanh();
         d.backward();
-        assert_approx!(a.gradient(), -3.0);
+        assert_approx!(a.gradient(), 3.0);
         assert_approx!(b.gradient(), 2.0);
         assert_approx!(c.gradient(), 1.0);
 
     }
     
     #[test]
-    fn abc_backward2()
+    fn abc_backpropagation2()
     {
         let a = Value::from(2.0, vec![], Op::None);
         let b = - Value::from(3.0, vec![], Op::None);
@@ -498,10 +510,12 @@ mod tests {
         assert_approx!(b.gradient(), 2.0);
         assert_approx!(c.gradient(), 1.0);
 
-    }
+    }  
+
+
 
     #[test]
-    fn abc_backward3()
+    fn abc_backpropagation3()
     {
         let a = Value::from(2.0, vec![], Op::None);
         let b = Value::from(-3.0, vec![], Op::None);
@@ -517,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn abc_backward4() {
+    fn abc_backpropagation4() {
        
         let x1 = Value::from(2.0, vec![], Op::None);
         let x2 = Value::from(0.0, vec![], Op::None);
