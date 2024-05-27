@@ -246,9 +246,13 @@ impl Value {
             let out_value = node.value();
 
             match node.op() {               
-                Op::Sub | Op::Add => {
+                Op::Add => {
                     node.lhs().inc_gradient(out_gradient);
                     node.rhs().inc_gradient(out_gradient);
+                }
+                Op::Sub => {
+                    node.lhs().inc_gradient(out_gradient);
+                    node.rhs().inc_gradient(-out_gradient);
                 }
                 Op::Mul => {
                     node.lhs().inc_gradient(node.rhs().value() * out_gradient);
@@ -541,13 +545,13 @@ mod tests {
 
         let result_add = a.clone() + b;
         let result_sub = a.clone() - b;
-        //let result_mul = a.clone() * b;
+        let result_mul = a.clone() * b;
         let result_div = a.clone() / b;
 
         // Assert the results of arithmetic operations
         assert_eq!(result_add.value(), 5.0);
         assert_eq!(result_sub.value(), -1.0);
-        //assert_eq!(result_mul.value(), 6.0);
+        assert_eq!(result_mul.value(), 6.0);
         assert_eq!(result_div.value(), 2.0 / 3.0);
       
     }
@@ -584,7 +588,7 @@ mod tests {
         let v5 = v3.clone() * Value::from(3.0,vec![],Op::None); // 18
         let v6 = v4 * v5; // 216
 
-        v6.clone().backward();
+        //v6.backward();
         
         println!("{}",Value::export_graph(&v6));
 
@@ -606,9 +610,9 @@ mod tests {
         let b = Value::from(3.0, vec![], Op::None);
         let c = Value::from(10.0, vec![], Op::None);
         let d = a.clone() * b.clone() + c.clone();
-
-        //let d = d.tanh();
+      
         d.backward();
+        println!("{}",Value::export_graph(&d));
         assert_approx!(a.gradient(), 3.0);
         assert_approx!(b.gradient(), 2.0);
         assert_approx!(c.gradient(), 1.0);
@@ -647,10 +651,27 @@ mod tests {
         assert_approx!(b.gradient(), 2.0);
         assert_approx!(c.gradient(), 1.0);
 
-    }  
+    }
 
     #[test]
     fn abc_backpropagation4()
+    {
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = Value::from(3.0, vec![], Op::None);
+        let c = Value::from(10.0, vec![], Op::None);
+        let d = a.clone() * b.clone() - c.clone();
+
+        d.backward();
+        println!("{}",Value::export_graph(&d));
+
+        assert_approx!(a.gradient(), 3.0);
+        assert_approx!(b.gradient(), 2.0);
+        assert_approx!(c.gradient(), -1.0);
+
+    }    
+
+    #[test]
+    fn abc_backpropagation5()
     {
         let a = Value::from(2.0, vec![], Op::None);
         let b = Value::from(-3.0, vec![], Op::None);
@@ -659,6 +680,7 @@ mod tests {
 
 
         d.backward();
+        println!("{}",Value::export_graph(&d));
         assert_approx!(a.gradient(), -0.3333333333333333);
         assert_approx!(b.gradient(), -0.2222222222222222);
         assert_approx!(c.gradient(), 1.0);
@@ -666,7 +688,7 @@ mod tests {
     }
 
     #[test]
-    fn abc_backpropagation5() {
+    fn abc_backpropagation6() {
        
         let x1 = Value::from(2.0, vec![], Op::None);
         let x2 = Value::from(0.0, vec![], Op::None);
