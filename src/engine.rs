@@ -30,6 +30,8 @@ pub enum Op {
     Neg
 }
 
+
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct ValueData {
@@ -64,6 +66,9 @@ impl ValueData {
 #[derive(Clone, Debug)]
 pub struct Value(Rc<RefCell<ValueData>>);
 
+
+
+
 impl Value {
     pub fn new(value: f64) -> Value {
         let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst); 
@@ -89,6 +94,7 @@ impl Value {
         })))
     } 
 
+    
     
     pub fn inner(&self) -> Ref<ValueData> {
         (*self.0).borrow()
@@ -284,38 +290,36 @@ impl Value {
             }
         }
     }
-
-    
-
+  
 
      // Create a GraphViz dot format string representation of the graph.
+     // https://dreampuf.github.io/GraphvizOnline
      pub fn export_graph(&self) -> String {    
         fn inner(node: &Value) -> String {
             let mut opstr : String = String::new();
             let mut color : u16 = 0;
             match node.op(){               
-                Op::Add  => { opstr ="add".to_owned(); color = 1; }
-                Op::Sub  => { opstr ="sub".to_owned(); color = 1; }
-                Op::Mul => {  opstr = "mul".to_owned(); color = 2;}
-                Op::Div => {  opstr= "div".to_owned(); color = 2; }
+                Op::Add  => { opstr ="+".to_owned(); color = 1; }
+                Op::Sub  => { opstr ="-".to_owned(); color = 1; }
+                Op::Mul => {  opstr = "*".to_owned(); color = 2;}
+                Op::Div => {  opstr= "/".to_owned(); color = 2; }
                 Op::Neg => {  opstr= "neg".to_owned(); color = 2; }
                 Op::Tanh => { opstr = "tanh".to_owned(); color = 3;}
                 Op::Exp => {  opstr= "exp".to_owned(); color = 4;  }
                 Op::Pow => {  opstr = "pow".to_owned(); color = 5; }
                 Op::Relu => { opstr = "relu".to_owned(); color = 6;}  
-                Op::None => { opstr = "none".to_owned(); color = 0;}        
+                Op::None => { opstr = "value".to_owned(); color = 0;}        
                 _ => (),
             }
             let id = node.id();      
             let mut s = format!(
-                "{} [label=\"{{{} {:.2} | {:.2}}}\", color={}];\n",
+                "{} [label=\"{{{} | {:.2} | {:.2}}}\", color={}];\n",
                 id,
                 opstr,
                 node.value(),
                 node.gradient(),               
                 color,
             );
-            //s.push_str(&format!("{}\n",node.inner().children.len()));
             for prev in node.inner().children.iter() {
                 s.push_str(&inner(&prev));
                 s.push_str(&format!("{} -- {};\n", id, prev.inner().id));
