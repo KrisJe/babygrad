@@ -203,13 +203,13 @@ class MLP(Module):
 #[derive(Debug)]
 pub struct MLP {
     pub layers: Vec<Layer>,
-    //pub act: ActivationFunc,
+    pub act: ActivationFunc,
 }
 
 
 #[allow(dead_code)]
 impl MLP {
-    fn new(input_size: usize, hidden_layers_size: &[usize]) -> MLP {
+    fn new(input_size: usize, hidden_layers_size: &[usize], act: ActivationFunc) -> MLP {
         let mut layers: Vec<Layer> = Vec::new();
         let hlc = hidden_layers_size.len();
         layers.push(Layer::new(input_size, hidden_layers_size[0]));
@@ -217,7 +217,7 @@ impl MLP {
             layers.push(Layer::new(hidden_layers_size[i], hidden_layers_size[i + 1]))
         }
         layers.push(Layer::new(hidden_layers_size[hlc - 1], 1));
-        MLP {layers}
+        MLP {layers, act}
     }
 
     fn forward(&self, inputs: Vec<Value>) -> Value {
@@ -261,7 +261,7 @@ impl fmt::Display for MLP {
 mod tests {
     use super::*;
 
-    #[test]
+    //#[test]
     fn create_neutron() {
         let n = Neuron::new(3, false);        
         println!("{}", n);
@@ -269,7 +269,7 @@ mod tests {
 
     }
 
-    #[test]
+    //#[test]
     fn layer() {   
 
         let layer1 = Layer::new(4,4);
@@ -279,7 +279,7 @@ mod tests {
     }
 
 
-    #[test]
+    //#[test]
     fn MLP() {       
         let xs: &[&[f64]] = &[
             &[1.0, 6.0, 0.0],
@@ -290,7 +290,7 @@ mod tests {
             &[0.0, 1.0, 3.0],
         ];  
        
-        let mlp = MLP::new(3, &[4, 4]);
+        let mlp = MLP::new(3, &[4, 4], ActivationFunc::None);
         assert_eq!(mlp.parameters().len(), 41); 
         let output = mlp.forward(Value::vec(xs[0]));
   

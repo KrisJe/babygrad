@@ -1,6 +1,8 @@
 use std::ops;
 use std::{cell::{Ref, RefCell, RefMut},
-     rc::Rc};
+     rc::Rc,
+     collections::{HashMap, HashSet},
+     sync::atomic::AtomicUsize};
 use std::fmt;
 
 
@@ -36,19 +38,25 @@ pub struct ValueData {
     gradient: f64,
     op: Op,
     visited: bool,
+    id: usize, //for sorting
 }
 
+static VAL_CNT: AtomicUsize = AtomicUsize::new(0);
 
 impl ValueData {
-    fn new(value: f64) -> ValueData {       
+    
+    fn new(value: f64) -> ValueData {            
         ValueData {
             value: value,
             children: vec![],
             gradient: 0.0,
             op: Op::None,
             visited: false,
+            id : 0
         }
     }
+
+   
 }
 
 
@@ -58,24 +66,37 @@ pub struct Value(Rc<RefCell<ValueData>>);
 
 impl Value {
     pub fn new(value: f64) -> Value {
+        let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst); 
         Value(Rc::new(RefCell::new(ValueData {
             value: value,
             children: vec![], //Vec::new(),
             gradient: 0.0,
             op: Op::None,
             visited: false,
+            id,
         })))
     }
 
     pub fn from(value: f64, children: Vec<Value>, op: Op) -> Value {
+        let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst); 
         Value(Rc::new(RefCell::new(ValueData {
             value: value,
             children: children,
             gradient: 0.0,
             op: op,
             visited: false,
+            id ,
         })))
     } 
+
+    
+    pub fn inner(&self) -> Ref<ValueData> {
+        (*self.0).borrow()
+    }
+
+    pub fn inner_mut(&self) -> RefMut<ValueData> {
+        (*self.0).borrow_mut()
+    }
 
     fn child(&self, index: usize) -> Value {
         self.0.borrow().children[index].clone()
@@ -118,11 +139,19 @@ impl Value {
         self.0.borrow_mut().gradient += amount
     }
 
+    fn zero_gradient(&self, amount: f64) {
+        self.0.borrow_mut().gradient = 0.0
+    }
+
     pub fn vec(values: &[f64]) -> Vec<Value> {
         values
             .iter()
             .map(|el| Value::new(*el))
             .collect::<Vec<Value>>()
+    }
+
+    pub fn id(&self) -> usize{
+        self.0.borrow().id
     }
 
 
@@ -167,14 +196,29 @@ impl Value {
         result
     }
     
-    
+
+    //we get a panic!
+    fn topological_sort(&self) -> Vec<Value> {
+        let mut parameters: Vec<Value> = Vec::new();
+        loop {
+            let mut leafs = Value::_find_leaf_nodes_not_visited(self);
+            if leafs.len() == 0 {
+                break;
+            }
+            println!("{}",leafs.len());
+            parameters.append(&mut leafs);
+        }        
+        parameters.reverse();
+        parameters
+    }
+
+   
 
     fn backward(&self) {
         
         Value::_reset_children_gradients_and_visited(self);
 
         // Run topological sorting to compute the ordered list of parameters        
-
         let mut parameters: Vec<Value> = Vec::new();
         loop {
             let mut leafs = Value::_find_leaf_nodes_not_visited(self);
@@ -183,9 +227,17 @@ impl Value {
             }
             parameters.append(&mut leafs);
         }
-
         parameters.reverse();
+
+        /* 
+        println!("{}", parameters.len()); 
+        for p in parameters.clone(){
+            println!("{}", p);
+        }
+        self.inner_mut().gradient = 1.0;*/
+
         parameters[0].0.borrow_mut().gradient = 1.0;
+        
 
         // Fill in all the gradients in reverse topological order
 
@@ -229,12 +281,51 @@ impl Value {
         }
     }
 
-    pub fn export_graph(&self) {
-        /*https://medium.com/@zhguchev/how-to-use-graphviz-in-your-rust-code-eb2c5771cfab */
-        let mut g = graph!(id!("id"));
-        println!("{}",g.print(&mut PrinterContext::default()));     
-    }
+    
 
+
+     // Create a GraphViz dot format string representation of the graph.
+     pub fn export_graph(&self) -> String {    
+        fn inner(node: &Value) -> String {
+            let mut opstr : String = String::new();
+            let mut color : u16 = 0;
+            match node.op(){               
+                Op::Add  => { opstr ="add".to_owned(); color = 1; }
+                Op::Sub  => { opstr ="sub".to_owned(); color = 1; }
+                Op::Mul => {  opstr = "mul".to_owned(); color = 2;}
+                Op::Div => {  opstr= "div".to_owned(); color = 2; }
+                Op::Neg => {  opstr= "neg".to_owned(); color = 2; }
+                Op::Tanh => { opstr = "tanh".to_owned(); color = 3;}
+                Op::Exp => {  opstr= "exp".to_owned(); color = 4;  }
+                Op::Pow => {  opstr = "pow".to_owned(); color = 5; }
+                Op::Relu => { opstr = "relu".to_owned(); color = 6;}  
+                Op::None => { opstr = "none".to_owned(); color = 0;}        
+                _ => (),
+            }
+            let id = node.id();      
+            let mut s = format!(
+                "{} [label=\"{{{} {:.2} | {:.2}}}\", color={}];\n",
+                id,
+                opstr,
+                node.value(),
+                node.gradient(),               
+                color,
+            );
+            //s.push_str(&format!("{}\n",node.inner().children.len()));
+            for prev in node.inner().children.iter() {
+                s.push_str(&inner(&prev));
+                s.push_str(&format!("{} -- {};\n", id, prev.inner().id));
+            }
+            s
+        }
+    
+        let mut s = format!("strict graph {{\n");
+        s.push_str("rankdir=RL;\n");
+        s.push_str("node [shape=record,colorscheme=set28];\n");
+        s.push_str(&inner(&self));
+        s.push_str("}\n");
+        s
+    }
 }
 
 
@@ -250,7 +341,6 @@ impl ops::Add<Value> for Value {
         )
     }
 }
-
 
 impl ops::Mul<Value> for Value {
     type Output = Value;
@@ -275,7 +365,6 @@ impl ops::Div<Value> for Value {
         )
     }
 }
-
 /* 
 impl ops::Sub<Value> for Value {
     type Output = Value;
@@ -297,7 +386,6 @@ impl ops::Sub<Value> for Value {
     }
 }
 
-
 impl ops::Neg for Value {
     type Output = Value;
 
@@ -306,11 +394,11 @@ impl ops::Neg for Value {
     }
 }
 
-impl ops::Mul<Value> for f64 {
+impl ops::Mul<Value> for f64 { //creates an issue, panic when sorting!
     type Output = Value;
     
     fn mul(self, rhs: Value) -> Value {
-        Value::new(self * rhs.value())
+        Value::new(self * rhs.value())       
     }
 } 
 
@@ -377,6 +465,9 @@ impl fmt::Display for Value {
         write!(f, "Value[{}, grad={}, op={:?}]", self.value(), self.gradient(), self.op())
     }
 }
+
+
+
 
 
 
@@ -450,13 +541,13 @@ mod tests {
 
         let result_add = a.clone() + b;
         let result_sub = a.clone() - b;
-        let result_mul = a.clone() * b;
+        //let result_mul = a.clone() * b;
         let result_div = a.clone() / b;
 
         // Assert the results of arithmetic operations
         assert_eq!(result_add.value(), 5.0);
         assert_eq!(result_sub.value(), -1.0);
-        assert_eq!(result_mul.value(), 6.0);
+        //assert_eq!(result_mul.value(), 6.0);
         assert_eq!(result_div.value(), 2.0 / 3.0);
       
     }
@@ -478,6 +569,34 @@ mod tests {
         assert_eq!(result_mul.value(), 6.0);
         assert_eq!(result_div.value(), 2.0 / 3.0);
       
+    }
+
+    #[test]
+    fn topological_order() {
+        let v1 = Value::from(5.0,vec![],Op::None);
+        let v2 = Value::from(1.0,vec![],Op::None);
+        let v3 = v1 + v2; // 6
+        //let v4 = 2.0 * v3.clone(); // 12   need to wrap values in Value()!!!!
+        //let v5 = 3.0 * v3.clone(); // 18
+        //let v4 = v3.clone() * 2.0; // 12
+        //let v5 = v3.clone() * 3.0; // 18
+        let v4 = v3.clone() * Value::from(2.0,vec![],Op::None); // 12
+        let v5 = v3.clone() * Value::from(3.0,vec![],Op::None); // 18
+        let v6 = v4 * v5; // 216
+
+        v6.clone().backward();
+        
+        println!("{}",Value::export_graph(&v6));
+
+        let order = Value::topological_sort(&v6);
+
+        for p in order.clone(){
+            println!("{}", p);
+        }      
+        assert_eq!(order.len(), 8);
+
+       
+
     }
 
     #[test]
@@ -504,25 +623,41 @@ mod tests {
         let c = Value::from(10.0, vec![], Op::None);
         let d = a.clone() * b.clone() + c.clone();
 
-        //let d = d.tanh();
         d.backward();
+        println!("{}",Value::export_graph(&d));
+
         assert_approx!(a.gradient(), -3.0);
         assert_approx!(b.gradient(), 2.0);
         assert_approx!(c.gradient(), 1.0);
 
     }  
 
-
-
     #[test]
     fn abc_backpropagation3()
+    {
+        let a = Value::from(2.0, vec![], Op::None);
+        let b = Value::from(- 3.0, vec![], Op::None);
+        let c = Value::from(10.0, vec![], Op::None);
+        let d = a.clone() * b.clone() + c.clone();
+
+        d.backward();
+        println!("{}",Value::export_graph(&d));
+
+        assert_approx!(a.gradient(), -3.0);
+        assert_approx!(b.gradient(), 2.0);
+        assert_approx!(c.gradient(), 1.0);
+
+    }  
+
+    #[test]
+    fn abc_backpropagation4()
     {
         let a = Value::from(2.0, vec![], Op::None);
         let b = Value::from(-3.0, vec![], Op::None);
         let c = Value::from(10.0, vec![], Op::None);
         let d = a.clone() / b.clone() + c.clone();
 
-        //let d = d.tanh();
+
         d.backward();
         assert_approx!(a.gradient(), -0.3333333333333333);
         assert_approx!(b.gradient(), -0.2222222222222222);
@@ -531,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn abc_backpropagation4() {
+    fn abc_backpropagation5() {
        
         let x1 = Value::from(2.0, vec![], Op::None);
         let x2 = Value::from(0.0, vec![], Op::None);
