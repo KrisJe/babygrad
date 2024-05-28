@@ -324,7 +324,7 @@ impl Value {
                 Op::Exp => {  opstr= "exp".to_owned(); color = 4;  }
                 Op::Pow => {  opstr = "pow".to_owned(); color = 5; }
                 Op::Relu => { opstr = "relu".to_owned(); color = 6;}  
-                Op::None => { opstr = "value".to_owned(); color = 0;}        
+                Op::None => { opstr = format!("v{}",node.id()).to_owned(); color = 0;}        
                 _ => (),
             }
             let id = node.id();      
