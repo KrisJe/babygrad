@@ -113,6 +113,20 @@ impl Value {
             label: None
         })))
     }
+
+    pub fn from_with_label(value: f64, children: Vec<Value>, op: Op, s: Option<String>) -> Value {
+        let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst); 
+        Value(Rc::new(RefCell::new(ValueData {
+            value: value,
+            children: children,
+            gradient: 0.0,
+            op: op,
+            visited: false,
+            id ,
+            label: s
+        })))
+    }
+
     
     
     pub fn inner(&self) -> Ref<ValueData> {       
@@ -148,6 +162,10 @@ impl Value {
 
     fn visited(&self) -> bool {
         self.0.borrow().visited
+    }
+
+    pub fn label(&self) -> Option<String> {
+        self.0.borrow().label.clone()
     }
 
     pub fn value(&self) -> f64 {
@@ -313,7 +331,7 @@ impl Value {
             let mut s = format!(
                 "{} [label=\"{{{} | {:.2} | {:.2}}}\", color={}];\n",
                 id,
-                opstr,
+                match node.label() { Some(l) =>  l,  None => opstr},                
                 node.value(),
                 node.gradient(),               
                 color,
@@ -644,15 +662,15 @@ mod tests {
 
     #[test]
     fn topological_order() {
-        let v1 = Value::from(5.0,vec![],Op::None);
-        let v2 = Value::from(1.0,vec![],Op::None);
+        let v1 = Value::from_with_label(5.0,vec![],Op::None,Some("v1".to_owned()));
+        let v2 = Value::from_with_label(1.0,vec![],Op::None,Some("v2".to_owned()));
         let v3 = v1 + v2; // 6
         //let v4 = 2.0 * v3.clone(); // 12   need to wrap values in Value()!!!!
         //let v5 = 3.0 * v3.clone(); // 18
         //let v4 = v3.clone() * 2.0; // 12
         //let v5 = v3.clone() * 3.0; // 18
-        let v4 = v3.clone() * Value::from(2.0,vec![],Op::None); // 12
-        let v5 = v3.clone() * Value::from(3.0,vec![],Op::None); // 18
+        let v4 = v3.clone() * Value::from_with_label(2.0,vec![],Op::None,Some("vx".to_owned())); // 12
+        let v5 = v3.clone() * Value::from_with_label(3.0,vec![],Op::None,Some("vy".to_owned())); // 18
         let v6 = v4 * v5; // 216
 
         //v6.backward();
@@ -689,9 +707,9 @@ mod tests {
     #[test]
     fn abc_backpropagation2()
     {
-        let a = Value::from(2.0, vec![], Op::None);
-        let b = - Value::from(3.0, vec![], Op::None);
-        let c = Value::from(10.0, vec![], Op::None);
+        let a = Value::from_with_label(2.0, vec![], Op::None,Some("a".to_owned()));
+        let b = - Value::from_with_label(3.0, vec![], Op::None,Some("b".to_owned()));
+        let c = Value::from_with_label(10.0, vec![], Op::None,Some("c".to_owned()));
         let d = a.clone() * b.clone() + c.clone();
 
         d.backward();
@@ -706,9 +724,9 @@ mod tests {
     #[test]
     fn abc_backpropagation3()
     {
-        let a = Value::from(2.0, vec![], Op::None);
-        let b = Value::from(- 3.0, vec![], Op::None);
-        let c = Value::from(10.0, vec![], Op::None);
+        let a = Value::from_with_label(2.0, vec![], Op::None,Some("a".to_owned()));
+        let b = Value::from_with_label(- 3.0, vec![], Op::None,Some("b".to_owned()));
+        let c = Value::from_with_label(10.0, vec![], Op::None,Some("c".to_owned()));
         let d = a.clone() * b.clone() + c.clone();
 
         d.backward();
@@ -723,9 +741,9 @@ mod tests {
     #[test]
     fn abc_backpropagation4()
     {
-        let a = Value::from(2.0, vec![], Op::None);
-        let b = Value::from(3.0, vec![], Op::None);
-        let c = Value::from(10.0, vec![], Op::None);
+        let a = Value::from_with_label(2.0, vec![], Op::None,Some("a".to_owned()));
+        let b = Value::from_with_label(3.0, vec![], Op::None,Some("b".to_owned()));
+        let c = Value::from_with_label(10.0, vec![], Op::None,Some("c".to_owned()));
         let d = a.clone() * b.clone() - c.clone();
 
         d.backward();
@@ -740,9 +758,9 @@ mod tests {
     #[test]
     fn abc_backpropagation5()
     {
-        let a = Value::from(2.0, vec![], Op::None);
-        let b = Value::from(-3.0, vec![], Op::None);
-        let c = Value::from(10.0, vec![], Op::None);
+        let a = Value::from_with_label(2.0, vec![], Op::None,Some("a".to_owned()));
+        let b = Value::from_with_label(-3.0, vec![], Op::None,Some("b".to_owned()));
+        let c = Value::from_with_label(10.0, vec![], Op::None,Some("c".to_owned()));
         let d = a.clone() / b.clone() + c.clone();
 
 
