@@ -1,11 +1,11 @@
 use std::ops;
 use std::{cell::{Ref, RefCell, RefMut},
      rc::Rc,
-     collections::{HashMap, HashSet},
+     //collections::{HashMap, HashSet},
      sync::atomic::AtomicUsize};
 use std::fmt;
 
-
+/*
 extern crate graphviz_rust;
 use graphviz_rust::dot_structures::*;
 use graphviz_rust::parse;
@@ -13,7 +13,7 @@ use graphviz_rust::dot_generator::*;
 use graphviz_rust::attributes::GraphAttributes as GAttributes;
 use self::graphviz_rust::attributes::{EdgeAttributes, NodeAttributes, rankdir, shape};
 use self::graphviz_rust::printer::{DotPrinter, PrinterContext};
-
+*/
 
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
@@ -41,12 +41,12 @@ pub struct ValueData {
     op: Op,
     visited: bool,
     id: usize, //for sorting
+    label: Option<String>, //usefull when using graphviz
 }
 
 static VAL_CNT: AtomicUsize = AtomicUsize::new(0);
 
-impl ValueData {
-    
+impl ValueData {    
     fn new(value: f64) -> ValueData {            
         ValueData {
             value: value,
@@ -54,11 +54,10 @@ impl ValueData {
             gradient: 0.0,
             op: Op::None,
             visited: false,
-            id : 0
+            id : 0,
+            label: None
         }
-    }
-
-   
+    }  
 }
 
 
@@ -66,7 +65,26 @@ impl ValueData {
 #[derive(Clone, Debug)]
 pub struct Value(Rc<RefCell<ValueData>>);
 
+impl Default for  Value {
+    fn default() -> Self {
+        let id = VAL_CNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst); 
+        Value(Rc::new(RefCell::new(ValueData {
+            value: 0.0,
+            children: vec![], //Vec::new(),
+            gradient: 0.0,
+            op: Op::None,
+            visited: false,
+            id,
+            label: None
+        })))
+    }
+}
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Value[{}, grad={}, op={:?}]", self.value(), self.gradient(), self.op())
+    }
+}
 
 
 impl Value {
@@ -79,6 +97,7 @@ impl Value {
             op: Op::None,
             visited: false,
             id,
+            label: None
         })))
     }
 
@@ -91,17 +110,17 @@ impl Value {
             op: op,
             visited: false,
             id ,
+            label: None
         })))
-    } 
-
+    }
     
     
-    pub fn inner(&self) -> Ref<ValueData> {
-        (*self.0).borrow()
+    pub fn inner(&self) -> Ref<ValueData> {       
+        self.0.borrow()
     }
 
-    pub fn inner_mut(&self) -> RefMut<ValueData> {
-        (*self.0).borrow_mut()
+    pub fn inner_mut(&self) -> RefMut<ValueData> {        
+        self.0.borrow_mut()
     }
 
     fn child(&self, index: usize) -> Value {
@@ -118,7 +137,6 @@ impl Value {
         self.child(0)
     }
     
-    
     fn rhs(&self) -> Value {
         assert!(self.0.borrow().children.len() == 2);
         self.child(1)
@@ -131,7 +149,6 @@ impl Value {
     fn visited(&self) -> bool {
         self.0.borrow().visited
     }
-
 
     pub fn value(&self) -> f64 {
         self.0.borrow().value
@@ -159,22 +176,6 @@ impl Value {
     pub fn id(&self) -> usize{
         self.0.borrow().id
     }
-
-
-  
-    pub fn tanh(self) -> Value {
-        Value::from(self.value().tanh(), vec![self.clone()], Op::Tanh)
-    }
-
- 
-    pub fn exp(self) -> Value {
-        Value::from(self.value().exp(), vec![self.clone()], Op::Exp)
-    }
-
-    pub fn pow(self, value: f64) -> Value {
-        Value::from(self.value().powf(value), vec![self.clone()], Op::Pow)
-    }
-
 
     fn _reset_children_gradients_and_visited(node: &Value) {
         for children in node.0.borrow().children.iter() {
@@ -217,8 +218,6 @@ impl Value {
         parameters.reverse();
         parameters
     }
-
-   
 
     fn backward(&self) {
         
@@ -289,8 +288,7 @@ impl Value {
                 _ => (),
             }
         }
-    }
-  
+    } 
 
      // Create a GraphViz dot format string representation of the graph.
      // https://dreampuf.github.io/GraphvizOnline
@@ -334,8 +332,37 @@ impl Value {
         s.push_str("}\n");
         s
     }
+
 }
 
+
+/*unary operations*/
+impl Value{
+    fn unary_op(self, op: Op, f: impl FnOnce(f64) -> f64) -> Value {
+        Value::from(f(self.value()), vec![self.clone()], op)
+    }
+
+    pub fn tanh(self) -> Value {
+        //Value::from(self.value().tanh(), vec![self.clone()], Op::Tanh)
+        self.unary_op(Op::Tanh, f64::tanh)
+    }
+
+ 
+    pub fn exp(self) -> Value {
+        //Value::from(self.value().exp(), vec![self.clone()], Op::Exp)
+        self.unary_op(Op::Exp, f64::exp)
+    }
+
+    pub fn pow(self, value: f64) -> Value {
+        //Value::from(self.value().powf(value), vec![self.clone()], Op::Pow)
+        Value::from(self.value().powf(value), vec![self.clone()], Op::Pow)
+    }
+
+    pub fn relu(self) -> Value {
+        self.unary_op(Op::Relu, |x| x.max(0.0))
+    }
+
+}
 
 
 impl ops::Add<Value> for Value {
@@ -468,11 +495,7 @@ impl ops::Div<f64> for Value {
 
 }
 
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Value[{}, grad={}, op={:?}]", self.value(), self.gradient(), self.op())
-    }
-}
+
 
 
 
@@ -578,6 +601,46 @@ mod tests {
         assert_eq!(result_div.value(), 2.0 / 3.0);
       
     }
+
+    #[test]
+    fn test_tanh() {
+        let value = Value::from(1.0, vec![], Op::Tanh);
+        let result = value.clone().tanh();
+        let expected = Value::from(1.0_f64.tanh(), vec![value], Op::Tanh);
+        assert_eq!(result.value(), expected.value());
+    }
+
+    #[test]
+    fn test_exp() {
+        let value = Value::from(1.0, vec![], Op::Exp);
+        let result = value.clone().exp();
+        let expected = Value::from(1.0_f64.exp(), vec![value], Op::Exp);
+        assert_eq!(result.value(), expected.value());
+    }
+
+    #[test]
+    fn test_pow() {
+        let value = Value::from(2.0, vec![], Op::Pow);
+        let result = value.clone().pow(3.0);
+        let expected = Value::from(2.0f64.powf(3.0), vec![value], Op::Pow);
+        assert_eq!(result.value(), expected.value());
+    }
+
+    #[test]
+    fn test_relu() {
+        let value = Value::from(-1.0, vec![], Op::Relu);
+        let result = value.clone().relu();
+        let expected = Value::from(0.0, vec![value.clone()], Op::Relu);
+        assert_eq!(result.value(), expected.value());
+
+        let value = Value::from(1.0, vec![], Op::Relu);
+        let result = value.clone().relu();
+        let expected = Value::from(1.0, vec![value], Op::Relu);
+        assert_eq!(result.value(), expected.value());
+    }
+
+
+
 
     #[test]
     fn topological_order() {
